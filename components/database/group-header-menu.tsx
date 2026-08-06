@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Settings2, EyeOff, Trash2 } from "lucide-react";
-import { getClampedTop } from "@/lib/ui/clamp-to-viewport";
+import { useAnchorPosition, useMergedRef } from "@/lib/ui/use-anchor-position";
 
 interface GroupHeaderMenuProps {
   /** Called on open AND on every scroll/resize, so the menu tracks its anchor
@@ -46,17 +46,16 @@ export function GroupHeaderMenu({
     };
   }, [getAnchorRect]);
 
-  if (typeof document === "undefined") return null;
-
-  const winW = window.innerWidth;
   const width = 200;
-  const left = Math.max(8, Math.min(anchorRect.left, winW - width - 8));
-  const top = getClampedTop(anchorRect, 180, { gap: 4 });
+  const { setFloating, x, y } = useAnchorPosition({ anchorRect, placement: "bottom-start", gap: 4 });
+  const mergedRef = useMergedRef(ref, setFloating);
+
+  if (typeof document === "undefined") return null;
 
   return createPortal(
     <div
-      ref={ref}
-      style={{ position: "fixed", top, left, width, zIndex: 300 }}
+      ref={mergedRef}
+      style={{ position: "fixed", top: y, left: x, width, zIndex: 300 }}
       className="overflow-hidden rounded-md border border-border bg-background p-1.5"
     >
       {editable && (

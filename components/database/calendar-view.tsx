@@ -23,6 +23,7 @@ import { EntryContextMenu } from "@/components/database/entry-context-menu";
 import { CellCommentPopover } from "@/components/database/cell-comment-popover";
 import { CellDisplay } from "@/components/database/cells/cell-display";
 import { PageIcon } from "@/components/pages/page-icon";
+import { useAnchorPosition, useMergedRef } from "@/lib/ui/use-anchor-position";
 import { resolveDisplayAs, resolveWrapContent } from "@/components/database/view-property-resolver";
 
 const DAYS   = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -128,6 +129,55 @@ function MorePopupEntryRow({ entry, onClick, onDelete }: MorePopupEntryRowProps)
           <Trash2 size={11} />
         </button>
       )}
+    </div>
+  );
+}
+
+// ── MorePopup ─────────────────────────────────────────────────────────────────
+// Anchored to the cursor point where the "+N more" chip was hovered, not a DOM
+// element — the anchor rect collapses to a zero-size point at (x, y).
+interface MorePopupProps {
+  morePopup: { key: string; x: number; y: number; entries: DbEntry[] };
+  morePopupRef: React.RefObject<HTMLDivElement | null>;
+  onMouseEnter: () => void;
+  onMouseLeave: () => void;
+  onEntryClick: (entry: DbEntry) => void;
+  onEntryDelete?: (entry: DbEntry) => void;
+}
+
+function MorePopup({ morePopup, morePopupRef, onMouseEnter, onMouseLeave, onEntryClick, onEntryDelete }: MorePopupProps) {
+  const POPUP_W = 220;
+  const { setFloating, x, y } = useAnchorPosition({
+    anchorRect: { top: morePopup.y, bottom: morePopup.y, left: morePopup.x, right: morePopup.x },
+    placement: "bottom-start",
+    gap: 12,
+  });
+  const mergedRef = useMergedRef(morePopupRef, setFloating);
+  const [ey, em, ed] = morePopup.key.split("-").map(Number);
+
+  return (
+    <div
+      style={{ position: "fixed", top: y, left: x, zIndex: 9999, width: POPUP_W }}
+      ref={mergedRef}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      className="overflow-hidden rounded-md border border-border bg-popover"
+    >
+      <div className="border-b border-border px-3 py-2">
+        <span className="text-xs font-semibold text-muted-foreground">
+          {MONTHS_SHORT[em - 1]} {ed}, {ey}
+        </span>
+      </div>
+      <div className="max-h-55 overflow-y-auto p-1">
+        {morePopup.entries.map((entry) => (
+          <MorePopupEntryRow
+            key={entry.id}
+            entry={entry}
+            onClick={() => onEntryClick(entry)}
+            onDelete={onEntryDelete ? () => onEntryDelete(entry) : undefined}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -578,42 +628,14 @@ export function CalendarView({
 
       {/* ── "+N more" hover popup ── */}
       {morePopup && typeof window !== "undefined" && createPortal(
-        (() => {
-          const POPUP_W = 220;
-          const vw = window.innerWidth;
-          const vh = window.innerHeight;
-          const showAbove = morePopup.y > vh * 0.62;
-          const left = Math.min(morePopup.x + 4, vw - POPUP_W - 8);
-          const posStyle: React.CSSProperties = showAbove
-            ? { position: "fixed", bottom: vh - morePopup.y + 8, left, zIndex: 9999, width: POPUP_W }
-            : { position: "fixed", top: morePopup.y + 16, left, zIndex: 9999, width: POPUP_W };
-          const [ey, em, ed] = morePopup.key.split("-").map(Number);
-          return (
-            <div
-              style={posStyle}
-              ref={morePopupRef}
-              onMouseEnter={cancelCloseMore}
-              onMouseLeave={scheduleCloseMore}
-              className="overflow-hidden rounded-md border border-border bg-popover"
-            >
-              <div className="border-b border-border px-3 py-2">
-                <span className="text-xs font-semibold text-muted-foreground">
-                  {MONTHS_SHORT[em - 1]} {ed}, {ey}
-                </span>
-              </div>
-              <div className="max-h-55 overflow-y-auto p-1">
-                {morePopup.entries.map((entry) => (
-                  <MorePopupEntryRow
-                    key={entry.id}
-                    entry={entry}
-                    onClick={() => { if (openMode === "side_panel" && onOpenEntry) onOpenEntry(entry); setMorePopup(null); }}
-                    onDelete={isEditor ? () => { setDeleteTarget({ id: entry.id, title: entry.title ?? "" }); setMorePopup(null); } : undefined}
-                  />
-                ))}
-              </div>
-            </div>
-          );
-        })(),
+        <MorePopup
+          morePopup={morePopup}
+          morePopupRef={morePopupRef}
+          onMouseEnter={cancelCloseMore}
+          onMouseLeave={scheduleCloseMore}
+          onEntryClick={(entry) => { if (openMode === "side_panel" && onOpenEntry) onOpenEntry(entry); setMorePopup(null); }}
+          onEntryDelete={isEditor ? (entry) => { setDeleteTarget({ id: entry.id, title: entry.title ?? "" }); setMorePopup(null); } : undefined}
+        />,
         document.body,
       )}
     </div>

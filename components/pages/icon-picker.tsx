@@ -65,14 +65,30 @@ export interface IconPickerProps {
 // Popover has no controlled open prop, but IconPicker is only ever mounted while it should be
 // open; AutoOpener clicks a hidden PopoverButton once, synchronously before paint, to sync Headless UI's internal state.
 function AutoOpener({ innerRef }: { innerRef: React.RefObject<HTMLButtonElement | null> }) {
-  useLayoutEffect(() => { innerRef.current?.click(); }, [innerRef]);
+  // React Strict Mode (on by default for the app router in dev) double-invokes mount
+  // effects — without this guard, the 2nd invocation clicks the now-already-open button
+  // again, toggling it straight back to closed before the browser ever paints, so "Add
+  // icon" looks like it does nothing. Refs survive the double-invoke (only the effect
+  // body re-runs), so this keeps the actual click to exactly once either way.
+  const clickedRef = useRef(false);
+  useLayoutEffect(() => {
+    if (clickedRef.current) return;
+    clickedRef.current = true;
+    innerRef.current?.click();
+  }, [innerRef]);
   return (
+    // `sr-only` (1px, clipped), not `hidden` (display:none): Headless UI's PopoverPanel
+    // watches its registered button via ResizeObserver/IntersectionObserver and auto-closes
+    // the instant that button's rect is 0x0x0x0 (see `useOnDisappear`, its safety net for a
+    // trigger that gets unmounted while open). A `display:none` button is *always* 0x0, so
+    // the panel was closing itself again right after AutoOpener opened it — `sr-only` keeps
+    // a real (if invisible) box so that watcher never fires.
     <PopoverButton
       ref={innerRef}
       type="button"
       tabIndex={-1}
       aria-hidden="true"
-      className="hidden"
+      className="sr-only"
     />
   );
 }

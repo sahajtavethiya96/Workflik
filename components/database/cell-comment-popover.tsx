@@ -17,6 +17,7 @@ import { useHoverTooltip } from "@/hooks/use-hover-tooltip";
 import { useMentionAutocomplete } from "@/hooks/use-mention-autocomplete";
 import { IconTooltip } from "@/components/ui/icon-tooltip";
 import { ReactionTooltip } from "@/components/ui/reaction-tooltip";
+import { useAnchorPosition, useMergedRef } from "@/lib/ui/use-anchor-position";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -64,23 +65,21 @@ interface EmojiMenuState { commentId: string; rect: DOMRect }
 
 const FullEmojiPicker = React.forwardRef<HTMLDivElement, {
   rect: DOMRect;
-  winH: number;
-  winW: number;
   onSelect: (emoji: string) => void;
   onClose: () => void;
-}>(function FullEmojiPicker({ rect, winH, winW, onSelect, onClose }, ref) {
+}>(function FullEmojiPicker({ rect, onSelect, onClose }, ref) {
   const pickerW = 352;
-  const pickerH = 322;
-  const left = Math.max(8, Math.min(rect.right - pickerW, winW - pickerW - 8));
-  const top  = rect.bottom + 6 + pickerH > winH
-    ? Math.max(8, rect.top - pickerH - 6)
-    : rect.bottom + 6;
+  const { setFloating, x: left, y: top } = useAnchorPosition({
+    anchorRect: rect,
+    placement: "bottom-end",
+  });
+  const mergedRef = useMergedRef(ref, setFloating);
 
   if (typeof document === "undefined") return null;
 
   return createPortal(
     <div
-      ref={ref}
+      ref={mergedRef}
       style={{ position: "fixed", top, left, zIndex: 9999, width: pickerW }}
       className="rounded-lg border border-border bg-popover overflow-hidden"
       onClick={e => e.stopPropagation()}
@@ -91,6 +90,25 @@ const FullEmojiPicker = React.forwardRef<HTMLDivElement, {
     document.body,
   );
 });
+
+// Positions the "⋯" comment/reply action menu — a thin wrapper so useAnchorPosition
+// (a hook) has its own component boundary; children keep closing over the parent's
+// handlers/state exactly as before, just no longer inline JSX in a conditional block.
+function MoreMenuPortal({ rect, menuRef, children }: { rect: DOMRect; menuRef: React.RefObject<HTMLDivElement | null>; children: React.ReactNode }) {
+  const { setFloating, x, y } = useAnchorPosition({ anchorRect: rect, placement: "bottom-end", gap: 4 });
+  const mergedRef = useMergedRef(menuRef, setFloating);
+  return (
+    <div
+      ref={mergedRef}
+      style={{ position: "fixed", top: y, left: x, zIndex: 900, width: 148 }}
+      className="overflow-hidden rounded-sm border border-border bg-popover py-0.5"
+      onClick={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
+    >
+      {children}
+    </div>
+  );
+}
 
 function extractText(node: Record<string, unknown>): string {
   if (!node) return "";
@@ -778,20 +796,17 @@ export function CellCommentPopover({
   // ── Positioning ────────────────────────────────────────────────────────────
 
   const POP_W = 300;
-  const winW = typeof window !== "undefined" ? window.innerWidth : 1280;
-  const winH = typeof window !== "undefined" ? window.innerHeight : 800;
-  // Center the popover horizontally over the anchor; clamp to viewport edges
-  const anchorCenterX = anchorRect.left + anchorRect.width / 2;
-  const left = Math.min(Math.max(8, anchorCenterX - POP_W / 2), winW - POP_W - 8);
-  const spaceBelow = winH - anchorRect.bottom - 8;
-  // Low threshold since the list scrolls internally (maxHeight below) and doesn't need full clearance;
-  // too high a threshold flipped short threads above mid-page anchors unnecessarily.
-  const showBelow = spaceBelow >= 180;
-  // Pin the bottom edge via CSS `bottom` (not a guessed `top`) so the popover hugs the anchor
-  // and grows upward by its actual height instead of leaving a dead gap.
-  const top = showBelow ? anchorRect.bottom + 6 : undefined;
-  const bottom = showBelow ? undefined : winH - anchorRect.top + 6;
-  const maxHeight = showBelow ? winH - anchorRect.bottom - 6 - 8 : anchorRect.top - 8 - 6;
+  // Centered on the anchor; flip() picks above/below from the popover's actual
+  // measured height (recalculated live as comments/replies load) rather than a
+  // fixed clearance threshold, and constrainSize caps maxHeight to whatever's available.
+  const { setFloating, x: left, y: top } = useAnchorPosition({
+    anchorRect,
+    placement: "bottom",
+    gap: 6,
+    constrainSize: true,
+    liveReposition: true,
+  });
+  const mergedPopoverRef = useMergedRef(popoverRef, setFloating);
 
   // ── Visible threads ────────────────────────────────────────────────────────
 
@@ -803,8 +818,8 @@ export function CellCommentPopover({
     <>
       {/* Main popover */}
       <div
-        ref={popoverRef}
-        style={{ position: "fixed", top, bottom, left, width: POP_W, zIndex: 800, maxHeight, display: "flex", flexDirection: "column" }}
+        ref={mergedPopoverRef}
+        style={{ position: "fixed", top, left, width: POP_W, zIndex: 800, display: "flex", flexDirection: "column" }}
         className="rounded-md border border-border bg-card overflow-hidden"
         onClick={(e) => e.stopPropagation()}
         onPointerDown={(e) => e.stopPropagation()}
@@ -1322,21 +1337,7 @@ export function CellCommentPopover({
 
       {/* ── More menu portal ── */}
       {moreMenu && (
-        <div
-          ref={moreMenuRef}
-          style={{
-            position: "fixed",
-            top: moreMenu.rect.bottom + 160 > winH
-              ? Math.max(8, moreMenu.rect.top - 160)
-              : moreMenu.rect.bottom + 4,
-            left: Math.min(Math.max(8, moreMenu.rect.right - 148), winW - 156),
-            zIndex: 900,
-            width: 148,
-          }}
-          className="overflow-hidden rounded-sm border border-border bg-popover py-0.5"
-          onClick={(e) => e.stopPropagation()}
-          onPointerDown={(e) => e.stopPropagation()}
-        >
+        <MoreMenuPortal rect={moreMenu.rect} menuRef={moreMenuRef}>
           {moreMenu.isOwn && (
             <button
               className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-foreground hover:bg-accent transition-colors"
@@ -1381,7 +1382,7 @@ export function CellCommentPopover({
               </button>
             </>
           )}
-        </div>
+        </MoreMenuPortal>
       )}
 
       {/* ── Full emoji picker portal ── */}
@@ -1389,8 +1390,6 @@ export function CellCommentPopover({
         <FullEmojiPicker
           ref={emojiMenuRef}
           rect={emojiMenu.rect}
-          winH={winH}
-          winW={winW}
           onSelect={(emoji) => {
             toggleReaction(emojiMenu.commentId, emoji);
           }}
@@ -1403,8 +1402,6 @@ export function CellCommentPopover({
         <FullEmojiPicker
           ref={insertEmojiRef}
           rect={insertEmojiAnchor.rect}
-          winH={winH}
-          winW={winW}
           onSelect={insertEmojiIntoTarget}
           onClose={() => setInsertEmojiAnchor(null)}
         />

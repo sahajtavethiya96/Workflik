@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Combobox, ComboboxInput, ComboboxOption, ComboboxOptions, Menu, MenuButton, MenuItem, MenuItems } from "@headlessui/react";
 import { Check, Plus, Settings2, X, UserPlus, ChevronRight, Loader2, ArrowLeft, MoreHorizontal, GripVertical, File as FileIcon, Paperclip, Maximize2, Download, ExternalLink, Trash2 } from "lucide-react";
@@ -16,6 +16,7 @@ import { createId } from "@paralleldrive/cuid2";
 import { useScrollLockWhileOpen } from "@/hooks/use-scroll-lock-while-open";
 import { useHoverTooltip } from "@/hooks/use-hover-tooltip";
 import { IconTooltip } from "@/components/ui/icon-tooltip";
+import { useAnchorPosition, useMergedRef } from "@/lib/ui/use-anchor-position";
 import { useUpload } from "@/lib/storage/use-upload";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -65,42 +66,21 @@ function CellEditorInner({ property, value, cellRect, workspaceId, onSave, onClo
   };
  }, []);
 
- // Real rendered height of the popover, kept in sync via ResizeObserver so
- // short editors (e.g. FileEditor's collapsed one-line state) don't get
- // anchored as if they were `maxH` tall — see `top` below.
- const [measuredHeight, setMeasuredHeight] = useState<number | null>(null);
- useLayoutEffect(() => {
-  const el = ref.current;
-  if (!el) return;
-  const update = () => setMeasuredHeight(el.getBoundingClientRect().height);
-  update();
-  const ro = new ResizeObserver(update);
-  ro.observe(el);
-  return () => ro.disconnect();
- }, []);
-
- const winH = window.innerHeight;
- const winW = window.innerWidth;
- const MARGIN = 8;
- const spaceBelow = winH - cellRect.bottom - MARGIN;
- const spaceAbove = cellRect.top - MARGIN;
- // Prefer below; flip above if significantly more space there
- const openBelow = spaceBelow >= 180 || spaceBelow >= spaceAbove;
- // Capped (not just floored): most editors have a small fixed height, so using the full
- // `spaceAbove` when flipping above near a tall page's bottom pinned `top` to ~0.
- const maxH = Math.min(Math.max(openBelow ? spaceBelow : spaceAbove, 160), 420);
- // Anchor off the actual measured height above the trigger, not the capped `maxH` estimate, or a
- // short editor renders with a big empty gap. Falls back to `maxH` before ResizeObserver measures.
- const openAboveHeight = Math.min(measuredHeight ?? maxH, maxH);
- const top  = openBelow
-  ? cellRect.bottom + 4
-  : Math.max(MARGIN, cellRect.top - Math.min(openAboveHeight, spaceAbove) - 4);
+ // `liveReposition` re-measures the popover's own rendered size (e.g. FileEditor's
+ // collapsed-vs-expanded state, or a tab switch) and reflows position/flip accordingly —
+ // replaces the old ResizeObserver + measuredHeight dance this used to hand-roll.
+ const { setFloating, x: left, y: top } = useAnchorPosition({
+  anchorRect: cellRect,
+  placement: "bottom-start",
+  gap: 4,
+  liveReposition: true,
+ });
+ const mergedRef = useMergedRef(ref, setFloating);
  // Clamp against the popover's own max width (below), not a smaller magic
  // number — anything narrower than that risks the box overflowing off the
  // right edge of the screen for cells near it, exactly the cut-off bug this
  // guards against.
  const POPOVER_MAX_W = 320;
- const left = Math.min(Math.max(MARGIN, cellRect.left), winW - POPOVER_MAX_W - MARGIN);
 
  useEffect(() => {
   function handler(e: MouseEvent) {
@@ -133,7 +113,7 @@ function CellEditorInner({ property, value, cellRect, workspaceId, onSave, onClo
   position: "fixed",
   top,
   left,
-  maxHeight: maxH,
+  maxHeight: 420,
   zIndex,
   // Files: fixed width so the Upload and Link tabs render at an identical
   // size instead of each shrink-wrapping to its own content (a short button
@@ -146,7 +126,12 @@ function CellEditorInner({ property, value, cellRect, workspaceId, onSave, onClo
  };
 
  return (
-  <div ref={ref} data-edit-property-exempt style={baseStyle} className="overflow-hidden rounded-md border border-border bg-background">
+  <div
+   ref={mergedRef}
+   data-edit-property-exempt
+   style={baseStyle}
+   className="overflow-hidden rounded-md border border-border bg-background"
+  >
    {(property.type === "select" || property.type === "status" || property.type === "multi_select") && (
     <SelectEditor
      property={property}

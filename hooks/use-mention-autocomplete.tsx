@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { resolveDisplayName } from "@/lib/users/display-name";
+import { useAnchorPosition } from "@/lib/ui/use-anchor-position";
+import type { AnchorRect } from "@/lib/ui/clamp-to-viewport";
 
 interface MentionUser {
   id: string;
@@ -27,8 +29,15 @@ export function useMentionAutocomplete({
   const [matchStart, setMatchStart] = useState(0);
   const [items, setItems] = useState<MentionUser[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
-  const [rect, setRect] = useState<{ top: number; left: number } | null>(null);
+  const [rect, setRect] = useState<AnchorRect | null>(null);
   const requestIdRef = useRef(0);
+  // Not clamped/flipped in the original — an input near the bottom or right edge of the
+  // viewport could push this dropdown off-screen. `useAnchorPosition` fixes that for free.
+  const { setFloating, x: dropdownLeft, y: dropdownTop } = useAnchorPosition({
+    anchorRect: rect ?? { top: 0, left: 0, right: 0, bottom: 0 },
+    placement: "bottom-start",
+    gap: 4,
+  });
 
   // Pass the input's new value (e.target.value), not getText() — that closure is still stale since
   // setText() hasn't committed yet. Only looks up to the caret so a finished "@mention" earlier doesn't re-trigger.
@@ -44,8 +53,7 @@ export function useMentionAutocomplete({
       setQuery(null);
       return;
     }
-    const r = el.getBoundingClientRect();
-    setRect({ top: r.bottom + 4, left: r.left });
+    setRect(el.getBoundingClientRect());
     setMatchStart(pos - match[1]!.length - 1);
     setQuery(match[1]!);
   }
@@ -148,10 +156,11 @@ export function useMentionAutocomplete({
           <div
             className="w-56 overflow-hidden rounded-md border border-border bg-popover p-1 shadow-lg"
             data-comment-exempt
+            ref={setFloating}
             style={{
               position: "fixed",
-              top: rect.top,
-              left: rect.left,
+              top: dropdownTop,
+              left: dropdownLeft,
               zIndex: 500,
             }}
           >

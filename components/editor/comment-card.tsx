@@ -991,8 +991,15 @@ function ThreadSection({ thread, currentUserId, isAdmin, workspaceId, reactionUs
    )}
 
    {/* ── Floating action pill — appears top-right on hover ── */}
+   {/* Opacity-based reveal, not `hidden`/`flex` display toggling: the reaction button's
+       PopoverPanel portals to document.body (its `anchor` prop forces a portal), so once the
+       cursor leaves this row to reach the portaled panel, `group-hover/thread` stops matching.
+       A `display:none` toggle would collapse the trigger button's rect to 0x0, which Headless
+       UI's PopoverButton watches via ResizeObserver (see `useOnDisappear`) and treats as "the
+       button disappeared" — auto-closing the panel out from under the user's cursor. Opacity
+       keeps the trigger's layout box (and therefore the panel) alive while it fades from view. */}
    {!thread.deletedAt && editingId !== thread.id && (
-    <div className="absolute top-2.5 right-3 z-10 hidden group-hover/thread:flex items-center gap-px rounded-sm border border-border bg-card px-0.5 py-0.5">
+    <div className="absolute top-2.5 right-3 z-10 flex items-center gap-px rounded-sm border border-border bg-card px-0.5 py-0.5 opacity-0 transition-opacity duration-150 group-hover/thread:opacity-100">
      {thread.isResolved ? (
       <button
        type="button"

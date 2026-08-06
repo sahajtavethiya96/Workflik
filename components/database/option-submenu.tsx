@@ -6,6 +6,7 @@ import { Check, Info, Trash2, X } from "lucide-react";
 import { OPTION_COLORS } from "@/components/database/property-registry";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useScrollLockWhileOpen } from "@/hooks/use-scroll-lock-while-open";
+import { useAnchorPosition, useMergedRef } from "@/lib/ui/use-anchor-position";
 import type { SelectOption } from "@/components/database/types";
 
 interface OptionSubmenuProps {
@@ -20,6 +21,8 @@ interface OptionSubmenuProps {
 export function OptionSubmenu({ option, anchorRect, onRename, onDelete, onRecolor, onClose }: OptionSubmenuProps) {
   const ref = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const { setFloating, x, y } = useAnchorPosition({ anchorRect, placement: "bottom-start", gap: 4 });
+  const mergedRef = useMergedRef(ref, setFloating);
   const [name, setName] = useState(option.name);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -58,19 +61,13 @@ export function OptionSubmenu({ option, anchorRect, onRename, onDelete, onRecolo
 
   if (typeof document === "undefined") return null;
 
-  const winW = window.innerWidth;
-  const winH = window.innerHeight;
   const width = 200;
-  const left = Math.max(8, Math.min(anchorRect.left, winW - width - 8));
-  const top  = anchorRect.bottom + 4 + 260 > winH
-    ? Math.max(8, anchorRect.top - 260)
-    : anchorRect.bottom + 4;
 
   return createPortal(
     <div
-      ref={ref}
+      ref={mergedRef}
       data-edit-property-exempt
-      style={{ position: "fixed", top, left, width, zIndex: 500 }}
+      style={{ position: "fixed", top: y, left: x, width, zIndex: 500 }}
       className="overflow-hidden rounded-md border border-border bg-background"
       onClick={(e) => e.stopPropagation()}
     >

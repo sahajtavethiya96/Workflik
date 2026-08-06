@@ -6,7 +6,7 @@ import Link from "next/link";
 import { ExternalLink, MessageSquare, Link2, Copy, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useScrollLockWhileOpen } from "@/hooks/use-scroll-lock-while-open";
-import { getClampedTop } from "@/lib/ui/clamp-to-viewport";
+import { useAnchorPosition, useMergedRef } from "@/lib/ui/use-anchor-position";
 
 interface CardContextMenuProps {
   anchorRect: DOMRect;
@@ -24,6 +24,8 @@ export function CardContextMenu({
   anchorRect, workspaceSlug, shortId, onCommentClick, onDuplicate, onDeleteRequest, onClose,
 }: CardContextMenuProps) {
   const ref = useRef<HTMLDivElement>(null);
+  const { setFloating, x, y } = useAnchorPosition({ anchorRect, placement: "bottom-start", gap: 4 });
+  const mergedRef = useMergedRef(ref, setFloating);
 
   useEffect(() => {
     function h(e: MouseEvent) {
@@ -40,15 +42,11 @@ export function CardContextMenu({
   if (typeof document === "undefined") return null;
 
   const W = 192;
-  const left = Math.max(8, Math.min(anchorRect.left, window.innerWidth - W - 8));
-  const itemCount = 3 + (onDuplicate ? 1 : 0) + 1; // Open full page, Comment, Copy link, [Duplicate], Delete entry
-  const menuHeight = itemCount * 36 + 9 + 12; // items + divider + container padding
-  const top = getClampedTop(anchorRect, menuHeight, { gap: 4 });
 
   return createPortal(
     <div
-      ref={ref}
-      style={{ position: "fixed", top, left, zIndex: 300, width: W }}
+      ref={mergedRef}
+      style={{ position: "fixed", top: y, left: x, zIndex: 300, width: W }}
       className="overflow-hidden rounded-md border border-border bg-background p-1.5"
       onClick={(e) => e.stopPropagation()}
     >

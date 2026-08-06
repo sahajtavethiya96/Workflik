@@ -20,6 +20,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ICON_REGISTRY, PageIcon } from "@/components/pages/page-icon";
 import { useHoverTooltip } from "@/hooks/use-hover-tooltip";
 import { IconTooltip } from "@/components/ui/icon-tooltip";
+import { useAnchorPosition, useMergedRef } from "@/lib/ui/use-anchor-position";
 import type { DbProperty, SelectOption, StatusGroupKey, ViewPropertyOverride } from "@/components/database/types";
 
 interface EditPropertySidePanelProps {
@@ -266,35 +267,20 @@ function EditPropertySidePanelBody({
   const submenuOption = submenu ? options.find((o) => o.id === submenu.optionId) ?? null : null;
 
   // ── Position: anchored below (or above, if there's no room) the trigger, like every other menu ──
-  const winW = typeof window !== "undefined" ? window.innerWidth : 1280;
-  const winH = typeof window !== "undefined" ? window.innerHeight : 800;
-  const MARGIN = 8;
-  // Prefer left-aligning to the trigger (matches left-edge triggers like "Add property"),
-  // but flip to right-aligned when there isn't room — otherwise a trigger near the right
-  // edge of the screen (e.g. a column header's "⋯" button) gets clamped far away from it.
-  const spaceRight = winW - anchorRect.left - MARGIN;
-  const left = spaceRight < PANEL_WIDTH
-    ? Math.max(MARGIN, anchorRect.right - PANEL_WIDTH)
-    : Math.min(anchorRect.left, winW - PANEL_WIDTH - MARGIN);
-  const spaceBelow = winH - anchorRect.bottom - MARGIN;
-  const spaceAbove = anchorRect.top - MARGIN;
-  // Open whichever side has more room; a prior fixed threshold could pick the smaller
-  // side and squeeze content into an unnecessary inner scrollbar.
-  const openBelow = spaceBelow >= spaceAbove;
-  // Capped, not just floored — when the trigger sits near the top of a tall
-  // viewport, `spaceBelow` alone would stretch this to nearly full-viewport
-  // height even though the panel's actual content is a fixed, modest size.
-  const maxHeight = Math.min(Math.max(openBelow ? spaceBelow : spaceAbove, 220), 560);
-  const top = openBelow
-    ? anchorRect.bottom + 4
-    : Math.max(MARGIN, anchorRect.top - Math.min(maxHeight, spaceAbove) - 4);
+  const { setFloating, x: left, y: top } = useAnchorPosition({
+    anchorRect,
+    placement: "bottom-start",
+    gap: 4,
+    constrainSize: true,
+  });
+  const mergedRef = useMergedRef(ref, setFloating);
 
   return createPortal(
     <>
       <div
-        ref={ref}
+        ref={mergedRef}
         data-edit-property-exempt
-        style={{ position: "fixed", top, left, width: PANEL_WIDTH, maxHeight, zIndex: 400 }}
+        style={{ position: "fixed", top, left, width: PANEL_WIDTH, zIndex: 400 }}
         className="flex flex-col overflow-hidden rounded-md border border-border bg-background"
       >
         <div className="flex shrink-0 items-center justify-between border-b border-border px-3 py-2">

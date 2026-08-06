@@ -54,10 +54,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useScrollLockWhileOpen } from "@/hooks/use-scroll-lock-while-open";
 import { useHoverTooltip } from "@/hooks/use-hover-tooltip";
 import { IconTooltip } from "@/components/ui/icon-tooltip";
-import {
-  getClampedLeft,
-  getClampedTop,
-} from "@/lib/ui/clamp-to-viewport";
+import { useAnchorPosition, useMergedRef } from "@/lib/ui/use-anchor-position";
 import type { DbProperty, DbView, FilterRule, SortRule } from "./types";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -1229,8 +1226,11 @@ const PropertiesPanel = forwardRef<HTMLDivElement, PropertiesPanelProps>(
 
     // Position: align right edge of panel to button right edge, open below
     const panelW = 260;
-    const left = getClampedLeft(rect, panelW, { align: "end" });
-    const top = getClampedTop(rect, 320);
+    const { setFloating, x: left, y: top } = useAnchorPosition({
+      anchorRect: rect,
+      placement: "bottom-end",
+    });
+    const mergedRef = useMergedRef(ref, setFloating);
 
     const allVisible = hiddenPropertyIds.length === 0;
 
@@ -1295,7 +1295,7 @@ const PropertiesPanel = forwardRef<HTMLDivElement, PropertiesPanelProps>(
     return (
       <div
         className="overflow-hidden rounded-md border border-border bg-background"
-        ref={ref}
+        ref={mergedRef}
         style={{ position: "fixed", top, left, zIndex: 300, width: panelW }}
       >
         {/* Header */}

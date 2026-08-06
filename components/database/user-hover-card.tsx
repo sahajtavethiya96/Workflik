@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { getClampedLeft, getClampedTop } from "@/lib/ui/clamp-to-viewport";
+import { useAnchorPosition } from "@/lib/ui/use-anchor-position";
 import type { WorkspaceMember } from "@/components/database/types";
 
 // One in-flight/resolved fetch per workspace, shared across every hover card
@@ -75,15 +75,12 @@ export function UserHoverCard({ userId, workspaceId, currentUserId, cachedName, 
   const timeLabel = localTimeLabel(member?.userTimezone);
 
   const WIDTH = 220;
-  const left = getClampedLeft(
-    { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.left + WIDTH },
-    WIDTH,
-  );
-  const top = getClampedTop(rect, 76);
+  const { setFloating, x, y } = useAnchorPosition({ anchorRect: rect, placement: "bottom-start" });
 
   return createPortal(
     <div
-      style={{ position: "fixed", top, left, width: WIDTH, zIndex: 9999, pointerEvents: "none" }}
+      ref={setFloating}
+      style={{ position: "fixed", top: y, left: x, width: WIDTH, zIndex: 9999, pointerEvents: "none" }}
       className="rounded-md border border-border bg-popover px-2.5 py-2 shadow-lg"
     >
       <div className="flex items-center gap-2">

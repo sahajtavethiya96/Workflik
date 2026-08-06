@@ -16,6 +16,7 @@ import { OptionSubmenu } from "@/components/database/option-submenu";
 import { Switch } from "@/components/ui/switch";
 import { useHoverTooltip } from "@/hooks/use-hover-tooltip";
 import { IconTooltip } from "@/components/ui/icon-tooltip";
+import { useAnchorPosition, useMergedRef } from "@/lib/ui/use-anchor-position";
 import type { DbProperty, SelectOption, StatusGroupKey } from "@/components/database/types";
 
 export type BoardSettings = {
@@ -163,29 +164,22 @@ export function GroupSettingsPanel({
   const submenuOption = submenu ? options.find((o) => o.id === submenu.optionId) ?? null : null;
 
   // ── Position: anchored below (or above, if there's no room) the trigger ──
-  const winW = typeof window !== "undefined" ? window.innerWidth : 1280;
-  const winH = typeof window !== "undefined" ? window.innerHeight : 800;
-  const MARGIN = 8;
-  const spaceRight = winW - anchorRect.left - MARGIN;
-  const left = spaceRight < PANEL_WIDTH
-    ? Math.max(MARGIN, anchorRect.right - PANEL_WIDTH)
-    : Math.min(anchorRect.left, winW - PANEL_WIDTH - MARGIN);
-  const spaceBelow = winH - anchorRect.bottom - MARGIN;
-  const spaceAbove = anchorRect.top - MARGIN;
-  const openBelow = spaceBelow >= 320 || spaceBelow >= spaceAbove;
-  const maxHeight = Math.max(openBelow ? spaceBelow : spaceAbove, 220);
-  const top = openBelow
-    ? anchorRect.bottom + 4
-    : Math.max(MARGIN, anchorRect.top - Math.min(maxHeight, spaceAbove) - 4);
+  const { setFloating, x: left, y: top } = useAnchorPosition({
+    anchorRect,
+    placement: "bottom-start",
+    gap: 4,
+    constrainSize: true,
+  });
+  const mergedRef = useMergedRef(ref, setFloating);
 
   if (typeof document === "undefined") return null;
 
   return createPortal(
     <>
     <div
-      ref={ref}
+      ref={mergedRef}
       data-edit-property-exempt
-      style={{ position: "fixed", top, left, width: PANEL_WIDTH, maxHeight, zIndex: 400 }}
+      style={{ position: "fixed", top, left, width: PANEL_WIDTH, zIndex: 400 }}
       className="flex flex-col overflow-hidden rounded-md border border-border bg-background"
     >
       {view === "groupBy" ? (

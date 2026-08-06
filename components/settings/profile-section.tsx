@@ -2,10 +2,12 @@
 
 import {
  Combobox,
- ComboboxButton,
  ComboboxInput,
  ComboboxOption,
  ComboboxOptions,
+ Popover,
+ PopoverButton,
+ PopoverPanel,
 } from "@headlessui/react";
 import { ArrowRight, Camera, Check, ChevronDown, Circle, Clock, Globe, KeyRound, Loader2, Search, ShieldAlert, X } from "lucide-react";
 import Link from "next/link";
@@ -71,11 +73,27 @@ function timeInZone(tz: string): string {
  } catch { return ""; }
 }
 
-/* ── Timezone dropdown — Headless UI Combobox (search + anchor-based
-   flip), replacing the hand-rolled computePos()/scroll/resize-reposition/
-   outside-click code select.tsx's Listbox already showed the pattern for. */
+/* ── Timezone dropdown — Headless UI Popover (anchor-based flip off its own
+   PopoverButton) wrapping a Combobox used only for the internal search +
+   keyboard nav, replacing the hand-rolled computePos()/scroll/resize-
+   reposition/outside-click code select.tsx's Listbox already showed the
+   pattern for. Combobox's own `anchor` positions off ComboboxInput — here
+   the input only exists inside the panel it would be positioning, so
+   anchoring lives on the outer Popover/PopoverButton instead (same split
+   relation-database-picker.tsx uses for a button-triggered search list). */
 function TimezoneDropdown({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+ return (
+  <Popover>
+   {(bag) => <TimezonePopoverBody {...bag} value={value} onChange={onChange} />}
+  </Popover>
+ );
+}
+
+function TimezonePopoverBody({
+ open, close, value, onChange,
+}: { open: boolean; close: () => void; value: string; onChange: (v: string) => void }) {
  const [query, setQuery] = useState("");
+ useEffect(() => { if (!open) setQuery(""); }, [open]);
 
  const filtered = query.trim()
   ? TIMEZONES.filter(tz => tz.toLowerCase().includes(query.trim().toLowerCase()))
@@ -89,71 +107,69 @@ function TimezoneDropdown({ value, onChange }: { value: string; onChange: (v: st
  }
 
  return (
-  <Combobox value={value} onChange={(next) => { if (next) onChange(next); }} onClose={() => setQuery("")}>
-   <ComboboxButton
+  <>
+   <PopoverButton
     className="flex w-55 items-center justify-between rounded-sm border border-border bg-muted/20 px-3 py-2 text-sm text-foreground outline-none transition-colors duration-150 hover:border-border data-open:border-primary data-open:bg-card"
    >
-    {({ open }) => (
-     <>
-      <div className="flex min-w-0 items-center gap-2">
-       <Globe size={14} className="shrink-0 text-muted-foreground" />
-       <span className="truncate">{value.replace(/_/g, " ")}</span>
-      </div>
-      <ChevronDown size={14} className={`shrink-0 text-muted-foreground transition-transform duration-150 ${open ? "rotate-180" : ""}`} />
-     </>
-    )}
-   </ComboboxButton>
-   <ComboboxOptions
+    <div className="flex min-w-0 items-center gap-2">
+     <Globe size={14} className="shrink-0 text-muted-foreground" />
+     <span className="truncate">{value.replace(/_/g, " ")}</span>
+    </div>
+    <ChevronDown size={14} className={`shrink-0 text-muted-foreground transition-transform duration-150 ${open ? "rotate-180" : ""}`} />
+   </PopoverButton>
+   <PopoverPanel
     anchor={{ to: "bottom end", gap: 6 }}
     transition
     className="z-600 w-70 overflow-hidden rounded-lg border border-border bg-card transition duration-100 ease-out data-leave:opacity-0 data-leave:scale-95"
    >
-    {/* Search */}
-    <div className="border-b border-border px-3 py-2.5">
-     <div className="flex items-center gap-2 rounded-sm border border-border bg-muted/30 px-2.5 py-1.5">
-      <Search size={14} className="shrink-0 text-muted-foreground" />
-      <ComboboxInput
-       autoFocus
-       value={query}
-       onChange={e => setQuery(e.target.value)}
-       placeholder="Search timezone…"
-       className="flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground-subtle"
-      />
-      {query && (
-       <button type="button" onClick={() => setQuery("")} className="text-muted-foreground hover:text-muted-foreground">
-        <X size={12} />
-       </button>
-      )}
-     </div>
-    </div>
-
-    {/* List — plain divs grouping ComboboxOptions by region, no special primitive needed */}
-    <div className="max-h-60 overflow-y-auto py-1">
-     {Object.entries(regionGroups).map(([region, tzs]) => (
-      <div key={region}>
-       <p className="sticky top-0 z-10 bg-card/90 px-3.5 py-1.5 text-xs font-semibold tracking-wide text-muted-foreground">{region}</p>
-       {tzs.map(tz => (
-        <ComboboxOption
-         key={tz}
-         value={tz}
-         className="flex w-full cursor-default items-center gap-2.5 px-3.5 py-2 text-left text-sm text-foreground outline-none transition-colors duration-150 data-focus:bg-accent data-selected:font-semibold"
-        >
-         {({ selected }) => (
-          <>
-           <span className={`flex size-4 shrink-0 items-center justify-center ${selected ? "" : "opacity-0"}`}>
-            <Check size={12} />
-           </span>
-           {tz.replace(/_/g, " ")}
-          </>
-         )}
-        </ComboboxOption>
-       ))}
+    <Combobox value={value} onChange={(next: string | null) => { if (next) { onChange(next); close(); } }}>
+     {/* Search */}
+     <div className="border-b border-border px-3 py-2.5">
+      <div className="flex items-center gap-2 rounded-sm border border-border bg-muted/30 px-2.5 py-1.5">
+       <Search size={14} className="shrink-0 text-muted-foreground" />
+       <ComboboxInput
+        autoFocus
+        value={query}
+        onChange={e => setQuery(e.target.value)}
+        placeholder="Search timezone…"
+        className="flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground-subtle"
+       />
+       {query && (
+        <button type="button" onClick={() => setQuery("")} className="text-muted-foreground hover:text-muted-foreground">
+         <X size={12} />
+        </button>
+       )}
       </div>
-     ))}
-     {filtered.length === 0 && <div className="py-6 text-center text-sm text-muted-foreground">No timezones found</div>}
-    </div>
-   </ComboboxOptions>
-  </Combobox>
+     </div>
+
+     {/* List — plain divs grouping ComboboxOptions by region, no special primitive needed */}
+     <ComboboxOptions static className="max-h-60 overflow-y-auto py-1">
+      {Object.entries(regionGroups).map(([region, tzs]) => (
+       <div key={region}>
+        <p className="sticky top-0 z-10 bg-card/90 px-3.5 py-1.5 text-xs font-semibold tracking-wide text-muted-foreground">{region}</p>
+        {tzs.map(tz => (
+         <ComboboxOption
+          key={tz}
+          value={tz}
+          className="flex w-full cursor-default items-center gap-2.5 px-3.5 py-2 text-left text-sm text-foreground outline-none transition-colors duration-150 data-focus:bg-accent data-selected:font-semibold"
+         >
+          {({ selected }) => (
+           <>
+            <span className={`flex size-4 shrink-0 items-center justify-center ${selected ? "" : "opacity-0"}`}>
+             <Check size={12} />
+            </span>
+            {tz.replace(/_/g, " ")}
+           </>
+          )}
+         </ComboboxOption>
+        ))}
+       </div>
+      ))}
+      {filtered.length === 0 && <div className="py-6 text-center text-sm text-muted-foreground">No timezones found</div>}
+     </ComboboxOptions>
+    </Combobox>
+   </PopoverPanel>
+  </>
  );
 }
 

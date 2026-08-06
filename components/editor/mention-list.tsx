@@ -3,10 +3,8 @@
 import { FileText, Plus } from "lucide-react";
 import {
  forwardRef,
- useCallback,
  useEffect,
  useImperativeHandle,
- useLayoutEffect,
  useRef,
  useState,
 } from "react";
@@ -14,6 +12,7 @@ import { exitSuggestion } from "@tiptap/suggestion";
 import type { MentionItem, MentionSuggestionProps } from "@/components/editor/extensions/mention-extension";
 import { MENTION_PLUGIN_KEY, PAGE_LINK_PLUGIN_KEY } from "@/components/editor/extensions/mention-extension";
 import { PageIcon } from "@/components/pages/page-icon";
+import { useAnchorPosition, useMergedRef } from "@/lib/ui/use-anchor-position";
 
 export interface MentionListHandle {
  onKeyDown: (event: KeyboardEvent) => boolean;
@@ -31,72 +30,34 @@ export const MentionList = forwardRef<MentionListHandle, Props>(
   const selectedRef = useRef(selectedIndex);
   selectedRef.current = selectedIndex;
   const containerRef = useRef<HTMLDivElement>(null);
-  const [coords, setCoords] = useState<{
-   top: number;
-   left: number;
-   maxHeight: number;
-  } | null>(null);
 
   useEffect(() => setSelectedIndex(0), [items]);
 
-  // Flip the popup above the caret when it doesn't fit below (e.g. a tall list on a near-empty
-  // query), cap height to scroll instead of overflow, and clamp left to the viewport.
-  const updatePosition = useCallback(() => {
-   const rect = clientRect?.();
-   const el = containerRef.current;
-   if (!rect || !el) return;
-   const MARGIN = 8;
-   const GAP = 4;
-   const menuH = el.offsetHeight;
-   const menuW = el.offsetWidth || 240;
-   const spaceBelow = window.innerHeight - rect.bottom - MARGIN;
-   const spaceAbove = rect.top - MARGIN;
-
-   let top: number;
-   let maxHeight: number;
-   // Prefer below; flip above only when the list doesn't fit below AND there's
-   // more room above.
-   if (menuH + GAP <= spaceBelow || spaceBelow >= spaceAbove) {
-    top = rect.bottom + GAP;
-    maxHeight = spaceBelow;
-   } else {
-    maxHeight = spaceAbove;
-    top = rect.top - Math.min(menuH, maxHeight) - GAP;
-   }
-
-   let left = rect.left;
-   if (left + menuW > window.innerWidth - MARGIN) {
-    left = window.innerWidth - menuW - MARGIN;
-   }
-   if (left < MARGIN) left = MARGIN;
-
-   setCoords({ top, left, maxHeight: Math.max(0, maxHeight) });
-  }, [clientRect]);
-
-  // Reposition after layout (before paint, so there's no visible jump) whenever
-  // the query/items change.
-  useLayoutEffect(() => {
-   updatePosition();
-  }, [updatePosition, suggestionProps]);
+  // Flips above the caret when the list doesn't fit below, caps height to scroll instead of
+  // overflow, and clamps left to the viewport. `liveReposition` catches window resize (the
+  // caret itself doesn't move, but available space does) — a fresh `clientRect()` is read
+  // every render regardless, since `suggestionProps` changes on every keystroke.
+  const rect = clientRect?.();
+  const { setFloating, x: left, y: top } = useAnchorPosition({
+   anchorRect: rect ?? { top: 0, left: 0, right: 0, bottom: 0 },
+   placement: "bottom-start",
+   gap: 4,
+   constrainSize: true,
+   liveReposition: true,
+  });
+  const mergedRef = useMergedRef(containerRef, setFloating);
 
   // Popup is `position: fixed` so it'd detach from the caret on scroll — close on any scroll
-  // outside the popup itself (capture-phase to catch any ancestor container); resize just repositions.
+  // outside the popup itself (capture-phase to catch any ancestor container).
   useEffect(() => {
    function onScroll(e: Event) {
     if (containerRef.current?.contains(e.target as Node)) return;
     exitSuggestion(editor.view, MENTION_PLUGIN_KEY);
     exitSuggestion(editor.view, PAGE_LINK_PLUGIN_KEY);
    }
-   function onResize() {
-    updatePosition();
-   }
    window.addEventListener("scroll", onScroll, true);
-   window.addEventListener("resize", onResize);
-   return () => {
-    window.removeEventListener("scroll", onScroll, true);
-    window.removeEventListener("resize", onResize);
-   };
-  }, [editor, updatePosition]);
+   return () => window.removeEventListener("scroll", onScroll, true);
+  }, [editor]);
 
   // Suggestion plugin only re-evaluates "active" on transactions inside the editor, so an outside
   // click never closes this fixed-position popup on its own — dispatch its exit transaction directly.
@@ -133,8 +94,7 @@ export const MentionList = forwardRef<MentionListHandle, Props>(
    command(item);
   }
 
-  const pos = clientRect?.();
-  if (!typedItems.length || !pos) return null;
+  if (!typedItems.length || !rect) return null;
 
   const people = typedItems.filter((i) => i.mentionType === "user");
   const pageItems = typedItems.filter((i) => i.mentionType === "page");
@@ -143,12 +103,11 @@ export const MentionList = forwardRef<MentionListHandle, Props>(
 
   return (
    <div
-    ref={containerRef}
+    ref={mergedRef}
     style={{
      position: "fixed",
-     top: coords ? coords.top : pos.bottom + 4,
-     left: coords ? coords.left : pos.left,
-     maxHeight: coords ? coords.maxHeight : undefined,
+     top,
+     left,
      overflowY: "auto",
      overflowX: "hidden",
      zIndex: 400,

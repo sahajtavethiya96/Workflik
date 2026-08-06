@@ -1,33 +1,20 @@
 "use client";
 
-import { getClampedLeft } from "@/lib/ui/clamp-to-viewport";
-
-const GAP    = 6;
-const MARGIN = 8;
+import { useAnchorPosition } from "@/lib/ui/use-anchor-position";
 
 // Notion-style reaction hover card (emoji + "X reacted with" caption); kept separate from IconTooltip
 // since only reaction badges need the bigger preview. Positioning mirrors IconTooltip's flip logic.
 export function ReactionTooltip({ rect, emoji, label, who }: { rect: DOMRect; emoji: string; label: string; who?: string }) {
-  const estimatedWidth  = Math.min(220, Math.max(90, label.length * 6 + 24));
-  const estimatedHeight = 56;
-  const centeredLeft = rect.left + rect.width / 2 - estimatedWidth / 2;
-
-  const left = getClampedLeft(
-    { top: rect.top, bottom: rect.bottom, left: centeredLeft, right: centeredLeft + estimatedWidth },
-    estimatedWidth,
-  );
-
-  const vh = typeof window !== "undefined" ? window.innerHeight : 0;
-  const above = rect.top - GAP - estimatedHeight;
-  const below = rect.bottom + GAP;
-  const top = above >= MARGIN ? above : Math.min(below, vh - MARGIN - estimatedHeight);
+  const estimatedWidth = Math.min(220, Math.max(90, label.length * 6 + 24));
+  const { setFloating, x, y } = useAnchorPosition({ anchorRect: rect, placement: "top" });
 
   return (
     <div
+      ref={setFloating}
       style={{
         position: "fixed",
-        top,
-        left,
+        top: y,
+        left: x,
         width: estimatedWidth,
         // Primary-tinted, not flat var(--popover) white — ties this to the
         // same accent color the reaction badge itself uses (bg-primary/10

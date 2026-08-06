@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { MessageSquare, Check, Copy } from "lucide-react";
 import { toast } from "sonner";
-import { getClampedLeft, getClampedTop } from "@/lib/ui/clamp-to-viewport";
+import { useAnchorPosition } from "@/lib/ui/use-anchor-position";
 
 interface CellActionOverlayProps {
   rect: DOMRect;
@@ -21,7 +21,7 @@ export function CellActionOverlay({
   onClearLeaveTimer, onScheduleLeave, onCommentClick, onCopyClick,
 }: CellActionOverlayProps) {
   const [tooltip, setTooltip] = useState<string | null>(null);
-  const [tooltipPos, setTooltipPos] = useState<{ top: number; left: number } | null>(null);
+  const [tooltipRect, setTooltipRect] = useState<DOMRect | null>(null);
 
   // Self-suppressing: any open cell-editor popup flags `document.body` while mounted (see
   // `CellEditorInner`), so we bail out here instead of trusting every caller to thread that state through.
@@ -36,19 +36,13 @@ export function CellActionOverlay({
   };
 
   function showTooltip(e: React.MouseEvent, label: string) {
-    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const estimatedWidth = Math.min(200, Math.max(32, label.length * 6 + 16));
-    const centeredLeft = r.left + r.width / 2 - estimatedWidth / 2;
-    setTooltipPos({
-      top:  getClampedTop(r, 28),
-      left: getClampedLeft({ top: r.top, bottom: r.bottom, left: centeredLeft, right: centeredLeft + estimatedWidth }, estimatedWidth),
-    });
+    setTooltipRect((e.currentTarget as HTMLElement).getBoundingClientRect());
     setTooltip(label);
   }
 
   function hideTooltip() {
     setTooltip(null);
-    setTooltipPos(null);
+    setTooltipRect(null);
   }
 
   return (
@@ -133,28 +127,34 @@ export function CellActionOverlay({
       </div>
 
       {/* Tooltip */}
-      {tooltip && tooltipPos && (
-        <div
-          style={{
-            position: "fixed",
-            top: tooltipPos.top,
-            left: tooltipPos.left,
-            background: "var(--popover)",
-            color: "var(--popover-foreground)",
-            border: "1px solid var(--border)",
-            fontSize: 11,
-            fontWeight: 500,
-            padding: "3px 8px",
-            borderRadius: "var(--radius-sm)",
-            whiteSpace: "nowrap",
-            pointerEvents: "none",
-            zIndex: 9999,
-            boxShadow: "0 2px 8px color-mix(in srgb, var(--foreground) 12%, transparent)",
-          }}
-        >
-          {tooltip}
-        </div>
-      )}
+      {tooltip && tooltipRect && <CellActionTooltip rect={tooltipRect} label={tooltip} />}
     </>
+  );
+}
+
+function CellActionTooltip({ rect, label }: { rect: DOMRect; label: string }) {
+  const { setFloating, x, y } = useAnchorPosition({ anchorRect: rect, placement: "bottom" });
+  return (
+    <div
+      ref={setFloating}
+      style={{
+        position: "fixed",
+        top: y,
+        left: x,
+        background: "var(--popover)",
+        color: "var(--popover-foreground)",
+        border: "1px solid var(--border)",
+        fontSize: 11,
+        fontWeight: 500,
+        padding: "3px 8px",
+        borderRadius: "var(--radius-sm)",
+        whiteSpace: "nowrap",
+        pointerEvents: "none",
+        zIndex: 9999,
+        boxShadow: "0 2px 8px color-mix(in srgb, var(--foreground) 12%, transparent)",
+      }}
+    >
+      {label}
+    </div>
   );
 }
